@@ -11,9 +11,11 @@ import {
   uploadMediaToBlob,
 } from "./lib/api";
 import { defaultScheduleTime } from "../shared/brands";
+import { PLATFORMS } from "../shared/types";
 import type {
   BrandId,
   CaptionSet,
+  Platform,
   PostType,
   SchedulePostResponse,
 } from "../shared/types";
@@ -35,6 +37,7 @@ export default function App() {
   const [captions, setCaptions] = useState<CaptionSet | null>(null);
   const [captionsDemo, setCaptionsDemo] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([...PLATFORMS]);
 
   const [scheduledAt, setScheduledAt] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
@@ -59,6 +62,14 @@ export default function App() {
     setBrand(b);
     // Reset the schedule to the new brand's default slot.
     setScheduledAt(defaultScheduleTime(b).toISOString());
+  }
+
+  function togglePlatform(platform: Platform, included: boolean) {
+    setSelectedPlatforms((prev) =>
+      included
+        ? PLATFORMS.filter((p) => p === platform || prev.includes(p))
+        : prev.filter((p) => p !== platform),
+    );
   }
 
   async function handleGenerate() {
@@ -95,6 +106,10 @@ export default function App() {
 
   async function handleSchedule() {
     if (!brand || !postType || !captions) return;
+    if (selectedPlatforms.length === 0) {
+      setError("Pick at least one platform to post to.");
+      return;
+    }
     setError(null);
     setNotice(null);
     setScheduling(true);
@@ -127,6 +142,7 @@ export default function App() {
         brand,
         postType,
         captions,
+        platforms: selectedPlatforms,
         scheduledAt: scheduledAt || undefined,
         mediaUrl: urlToUse || undefined,
       });
@@ -145,6 +161,7 @@ export default function App() {
     setContext("");
     setCaptions(null);
     setCaptionsDemo(false);
+    setSelectedPlatforms([...PLATFORMS]);
     setScheduledAt("");
     setMediaUrl("");
     setUploadingMedia(false);
@@ -210,7 +227,12 @@ export default function App() {
                   Demo captions — set <code>ANTHROPIC_API_KEY</code> to generate real ones with Claude.
                 </div>
               )}
-              <CaptionEditor captions={captions} onChange={setCaptions} />
+              <CaptionEditor
+                captions={captions}
+                onChange={setCaptions}
+                selected={selectedPlatforms}
+                onToggle={togglePlatform}
+              />
               <Scheduler
                 brand={brand}
                 scheduledAt={scheduledAt || defaultScheduleTime(brand).toISOString()}
@@ -223,12 +245,20 @@ export default function App() {
                   <button className="btn" onClick={startOver}>
                     Start over
                   </button>
-                  <button className="btn primary" onClick={handleSchedule} disabled={scheduling}>
+                  <button
+                    className="btn primary"
+                    onClick={handleSchedule}
+                    disabled={scheduling || selectedPlatforms.length === 0}
+                  >
                     {scheduling ? (
                       <>
                         <span className="spinner" />
                         {uploadingMedia ? `Uploading media… ${uploadPct}%` : "Scheduling…"}
                       </>
+                    ) : selectedPlatforms.length === 0 ? (
+                      "Pick a platform"
+                    ) : selectedPlatforms.length < 4 ? (
+                      `Schedule to ${selectedPlatforms.length} → `
                     ) : (
                       "Schedule via Buffer →"
                     )}

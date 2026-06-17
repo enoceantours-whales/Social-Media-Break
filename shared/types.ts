@@ -45,6 +45,8 @@ export interface SchedulePostRequest {
   brand: BrandId;
   postType: PostType;
   captions: CaptionSet;
+  /** Which platforms to actually post to. Omit to post to all four. */
+  platforms?: Platform[];
   /** ISO 8601 timestamp for when to publish. Omit to use the brand default. */
   scheduledAt?: string;
   /** Publicly reachable URL of the media to attach (Buffer requires a hosted URL). */

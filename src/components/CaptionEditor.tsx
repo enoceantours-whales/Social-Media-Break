@@ -17,9 +17,12 @@ function renderedLength(text: string, hashtags: string[]): number {
 interface Props {
   captions: CaptionSet;
   onChange: (captions: CaptionSet) => void;
+  /** Platforms that will actually be posted to. */
+  selected: Platform[];
+  onToggle: (platform: Platform, included: boolean) => void;
 }
 
-export function CaptionEditor({ captions, onChange }: Props) {
+export function CaptionEditor({ captions, onChange, selected, onToggle }: Props) {
   function update(platform: Platform, patch: Partial<CaptionSet[Platform]>) {
     onChange({ ...captions, [platform]: { ...captions[platform], ...patch } });
   }
@@ -27,27 +30,44 @@ export function CaptionEditor({ captions, onChange }: Props) {
   return (
     <div className="card">
       <h2>4 · Review &amp; edit captions</h2>
-      <p className="hint">Claude tuned each one to the platform and brand voice. Edit freely before scheduling.</p>
+      <p className="hint">
+        Claude tuned each one to the platform and brand voice. Edit freely, and untick any
+        platform you don&apos;t want to post to — only ticked ones are scheduled.
+      </p>
 
       {PLATFORMS.map((platform) => {
         const c = captions[platform];
         const meta = PLATFORM_META[platform];
         const length = renderedLength(c.text, c.hashtags);
         const over = meta.limit != null && length > meta.limit;
+        const included = selected.includes(platform);
         return (
-          <div className="caption" key={platform}>
+          <div
+            className="caption"
+            key={platform}
+            style={{ opacity: included ? 1 : 0.5 }}
+          >
             <div className="caption-head">
-              <span className="platform-tag">
+              <label
+                className="platform-tag"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={included}
+                  onChange={(e) => onToggle(platform, e.target.checked)}
+                />
                 <span aria-hidden>{meta.icon}</span>
                 {meta.label}
-              </span>
+              </label>
               <span className={`char-count ${over ? "over" : ""}`}>
-                {length} chars · {meta.target}
+                {included ? `${length} chars · ${meta.target}` : "won't post"}
               </span>
             </div>
             <textarea
               rows={3}
               value={c.text}
+              disabled={!included}
               onChange={(e) => update(platform, { text: e.target.value })}
             />
             <div className="hashtags">
@@ -58,6 +78,7 @@ export function CaptionEditor({ captions, onChange }: Props) {
                 id={`tags-${platform}`}
                 type="text"
                 value={c.hashtags.join(" ")}
+                disabled={!included}
                 onChange={(e) =>
                   update(platform, {
                     hashtags: e.target.value
