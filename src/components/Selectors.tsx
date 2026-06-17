@@ -1,6 +1,13 @@
 import { BRANDS, POST_TYPE_HINTS, POST_TYPE_LABELS } from "../../shared/brands";
-import { POST_TYPES } from "../../shared/types";
-import type { BrandId, PostType } from "../../shared/types";
+import { POST_TYPES, PLATFORMS } from "../../shared/types";
+import type { BrandId, Platform, PostType } from "../../shared/types";
+
+const PLATFORM_INFO: Record<Platform, { label: string; icon: string }> = {
+  instagram: { label: "Instagram", icon: "📸" },
+  facebook: { label: "Facebook", icon: "👥" },
+  twitter: { label: "Twitter / X", icon: "🐦" },
+  linkedin: { label: "LinkedIn", icon: "💼" },
+};
 
 interface BrandProps {
   value: BrandId | null;
@@ -22,6 +29,44 @@ export function BrandSelector({ value, onChange }: BrandProps) {
           >
             <div className="title">{b.name}</div>
             <div className="sub">{b.tagline}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface PlatformProps {
+  value: Platform[];
+  onChange: (platforms: Platform[]) => void;
+}
+
+export function PlatformSelector({ value, onChange }: PlatformProps) {
+  function toggle(p: Platform) {
+    // Keep a stable platform order regardless of click sequence.
+    onChange(
+      value.includes(p)
+        ? value.filter((x) => x !== p)
+        : PLATFORMS.filter((x) => x === p || value.includes(x)),
+    );
+  }
+  return (
+    <div className="card">
+      <h2>Platforms</h2>
+      <p className="hint">
+        Captions are written — and posted — only for the platforms you pick here.
+      </p>
+      <div className="option-grid">
+        {PLATFORMS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={`option ${value.includes(p) ? "selected" : ""}`}
+            onClick={() => toggle(p)}
+          >
+            <div className="title">
+              <span aria-hidden>{PLATFORM_INFO[p].icon}</span> {PLATFORM_INFO[p].label}
+            </div>
           </button>
         ))}
       </div>

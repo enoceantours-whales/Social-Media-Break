@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyCors, parseBody, sendError } from "./_lib/http.js";
 import { generateCaptions } from "./_lib/claude.js";
 import { BRANDS } from "../shared/brands.js";
-import { POST_TYPES } from "../shared/types.js";
+import { POST_TYPES, PLATFORMS } from "../shared/types.js";
 import type { GenerateCaptionsRequest } from "../shared/types.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -19,6 +19,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (body.imageBase64 && !body.imageMediaType) {
     return sendError(res, 400, "`imageMediaType` is required when `imageBase64` is provided.");
+  }
+  if (body.platforms) {
+    if (body.platforms.length === 0) {
+      return sendError(res, 400, "Select at least one platform to write captions for.");
+    }
+    if (body.platforms.some((p) => !PLATFORMS.includes(p))) {
+      return sendError(res, 400, "`platforms` contains an unknown platform.");
+    }
   }
 
   try {

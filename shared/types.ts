@@ -21,12 +21,15 @@ export interface PlatformCaption {
   hashtags: string[];
 }
 
-/** Captions keyed by platform — the shape Claude returns and the UI edits. */
-export type CaptionSet = Record<Platform, PlatformCaption>;
+/** Captions keyed by platform — the shape Claude returns and the UI edits.
+ *  Only the requested platforms are present, so entries are optional. */
+export type CaptionSet = Partial<Record<Platform, PlatformCaption>>;
 
 export interface GenerateCaptionsRequest {
   brand: BrandId;
   postType: PostType;
+  /** Which platforms to write captions for. Omit to write for all four. */
+  platforms?: Platform[];
   /** Optional free-text context from the user ("humpback breach off Dana Pt"). */
   context?: string;
   /** Optional base64-encoded image (no data: prefix) for vision on photo posts. */

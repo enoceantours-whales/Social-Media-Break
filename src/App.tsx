@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { StepNav, type StepDef } from "./components/StepNav";
 import { MediaUploader, type SelectedMedia } from "./components/MediaUploader";
-import { BrandSelector, PostTypeSelector } from "./components/Selectors";
+import { BrandSelector, PlatformSelector, PostTypeSelector } from "./components/Selectors";
 import { CaptionEditor } from "./components/CaptionEditor";
 import { Scheduler } from "./components/Scheduler";
 import {
@@ -74,6 +74,10 @@ export default function App() {
 
   async function handleGenerate() {
     if (!brand || !postType) return;
+    if (selectedPlatforms.length === 0) {
+      setError("Pick at least one platform to write captions for.");
+      return;
+    }
     setError(null);
     setGenerating(true);
     setResult(null);
@@ -90,6 +94,7 @@ export default function App() {
       const res = await generateCaptions({
         brand,
         postType,
+        platforms: selectedPlatforms,
         context: context.trim() || undefined,
         imageBase64,
         imageMediaType,
@@ -171,7 +176,7 @@ export default function App() {
     setNotice(null);
   }
 
-  const canGenerate = Boolean(brand && postType) && !generating;
+  const canGenerate = Boolean(brand && postType && selectedPlatforms.length) && !generating;
 
   return (
     <div className="app">
@@ -190,6 +195,7 @@ export default function App() {
           <MediaUploader media={media} onSelect={setMedia} />
           <BrandSelector value={brand} onChange={chooseBrand} />
           <PostTypeSelector value={postType} onChange={setPostType} />
+          <PlatformSelector value={selectedPlatforms} onChange={setSelectedPlatforms} />
 
           <div className="card">
             <h2>Add context (optional)</h2>
