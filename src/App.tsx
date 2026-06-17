@@ -4,12 +4,8 @@ import { MediaUploader, type SelectedMedia } from "./components/MediaUploader";
 import { BrandSelector, PlatformSelector, PostTypeSelector } from "./components/Selectors";
 import { CaptionEditor } from "./components/CaptionEditor";
 import { Scheduler } from "./components/Scheduler";
-import {
-  downscaleImageToBase64,
-  generateCaptions,
-  schedulePost,
-  uploadMediaToBlob,
-} from "./lib/api";
+import { downscaleImageToBase64, generateCaptions, schedulePost } from "./lib/api";
+import { uploadMediaToSupabase } from "./lib/supabase";
 import { defaultScheduleTime } from "../shared/brands";
 import { PLATFORMS } from "../shared/types";
 import type {
@@ -121,23 +117,13 @@ export default function App() {
     try {
       let urlToUse = mediaUrl.trim();
 
-      // No pasted URL but we have a file → upload it directly to Blob storage.
+      // No pasted URL but we have a file → upload it to Supabase Storage.
       if (!urlToUse && media) {
         setUploadingMedia(true);
         setUploadPct(0);
         try {
-          urlToUse = await uploadMediaToBlob(media.file, setUploadPct);
+          urlToUse = await uploadMediaToSupabase(media.file, setUploadPct);
           setMediaUrl(urlToUse);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "";
-          // If Blob isn't set up, schedule as text rather than blocking the demo.
-          if (/configured/i.test(msg)) {
-            setNotice(
-              "Media hosting (Vercel Blob) isn't set up yet, so this was scheduled as text. Add a Blob store to attach the photo/video.",
-            );
-          } else {
-            throw err; // a real upload failure should surface and abort.
-          }
         } finally {
           setUploadingMedia(false);
         }

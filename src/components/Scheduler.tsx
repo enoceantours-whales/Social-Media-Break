@@ -78,8 +78,8 @@ export function Scheduler({
 
       <p className="hint" style={{ marginTop: 14, marginBottom: 0 }}>
         Will be sent to Buffer for <strong>{friendly}</strong>. Your uploaded photo/video is
-        uploaded to Vercel Blob on schedule (large files included) and attached automatically —
-        or paste your own hosted URL above to override.
+        uploaded to storage on schedule and attached automatically — or paste your own hosted
+        URL above to override.
       </p>
     </div>
   );

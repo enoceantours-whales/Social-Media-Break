@@ -1,4 +1,3 @@
-import { upload } from "@vercel/blob/client";
 import type {
   ApiError,
   GenerateCaptionsRequest,
@@ -29,42 +28,6 @@ export function generateCaptions(
 
 export function schedulePost(req: SchedulePostRequest): Promise<SchedulePostResponse> {
   return post("/api/schedule-post", req);
-}
-
-/**
- * Upload media straight from the browser to Vercel Blob (bypassing the
- * serverless body limit, so large videos work). Returns a public URL for Buffer.
- *
- * Uses a single-request upload (not multipart) for reliability, and a timeout
- * so a stalled upload surfaces an error instead of hanging at 0% forever.
- */
-export async function uploadMediaToBlob(
-  file: File,
-  onProgress?: (pct: number) => void,
-): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
-  try {
-    const blob = await upload(file.name, file, {
-      access: "public",
-      handleUploadUrl: "/api/blob-upload",
-      contentType: file.type || undefined,
-      abortSignal: controller.signal,
-      onUploadProgress: onProgress
-        ? (e) => onProgress(Math.round(e.percentage))
-        : undefined,
-    });
-    return blob.url;
-  } catch (err) {
-    if (controller.signal.aborted) {
-      throw new Error(
-        "Media upload timed out. If the site has Vercel Deployment Protection enabled, turn it off — it blocks the upload.",
-      );
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 /** Read a File into a base64 string (no data: prefix) + its MIME type. */
