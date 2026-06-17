@@ -37,6 +37,7 @@ api/         Serverless functions
   _lib/      Claude, Buffer, and HTTP helpers
   generate-captions.ts   POST — Claude caption generation
   schedule-post.ts       POST — schedule to Buffer
+  upload-media.ts        POST — host media on Google Drive for Buffer
   profiles.ts            GET  — list connected Buffer channels
 src/         React app (components, API client, styles)
 ```
@@ -90,10 +91,30 @@ Add the real keys to switch each piece into live mode independently.
 | `BUFFER_ACCESS_TOKEN` | Buffer access token for scheduling |
 | `BUFFER_PROFILES_ENOCEAN` | Optional: pin Buffer profile IDs for Enocean, e.g. `instagram:5f…,facebook:5a…` |
 | `BUFFER_PROFILES_SMP` | Optional: same, for Slater Moore Photography |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Optional: service-account email for Drive media hosting |
+| `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | Optional: the service account's private key (keep `\n` escapes) |
+| `GOOGLE_DRIVE_FOLDER_ID` | Optional: Drive folder (shared with the service account) to upload into |
 
 If the brand profile vars are not set, the app auto-matches the first connected
 Buffer channel per network. Call `GET /api/profiles` (with a token configured)
 to discover your channel IDs.
+
+### Google Drive media hosting
+
+Buffer attaches media from a publicly reachable URL. When the `GOOGLE_*` vars
+are set, the Schedule step automatically uploads your file to Drive, shares it
+"anyone with link", and hands that URL to Buffer — so the actual photo/video is
+attached, not just text. To set it up:
+
+1. Create a Google Cloud **service account** and enable the **Drive API**.
+2. Generate a **JSON key** for it; copy `client_email` →
+   `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `private_key` →
+   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (keep the `\n` escapes, wrap in quotes).
+3. In Google Drive, create a folder, **share it (Editor) with the service
+   account's email**, and put the folder ID in `GOOGLE_DRIVE_FOLDER_ID`.
+
+If the vars are absent, the app falls back to scheduling captions as text (or
+you can paste your own hosted URL in the Schedule step).
 
 ---
 
@@ -109,9 +130,11 @@ to discover your channel IDs.
 
 ## Notes & limitations
 
-- **Media attachment:** Buffer's API attaches media from a publicly reachable
-  URL. The Schedule step accepts an optional hosted media URL; without one, the
-  generated captions are scheduled as text. Hosting uploaded files (e.g. to
-  blob storage) is a natural next step.
+- **Media hosting:** Uploaded files are auto-hosted on Google Drive (see above)
+  so Buffer can attach them. Two caveats: (1) the serverless upload endpoint
+  caps files at ~3 MB — fine for photos, but large videos should be pasted as a
+  hosted URL instead; (2) Drive's public direct-download links work reliably for
+  images but are not a true CDN, so for heavy video use a dedicated blob store
+  (S3/Cloudinary/Vercel Blob) is the eventual upgrade.
 - **Phase 2 ideas:** multi-image carousel upload, saved drafts, post history,
   and batch scheduling — see the project brief.

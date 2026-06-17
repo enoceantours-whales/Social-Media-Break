@@ -65,6 +65,28 @@ export interface SchedulePostResponse {
   demo: boolean;
 }
 
+export interface UploadMediaRequest {
+  /** base64-encoded file contents (no data: prefix). */
+  base64: string;
+  /** MIME type, e.g. "image/jpeg" or "video/mp4". */
+  mediaType: string;
+  /** Original filename, used as the Drive file name. */
+  filename: string;
+}
+
+export interface UploadMediaResponse {
+  /** Public, directly-fetchable URL for the hosted media, or null in demo mode. */
+  url: string | null;
+  /** Google Drive file id, for later cleanup. */
+  fileId: string | null;
+  /** True when Google Drive credentials are not configured. */
+  demo: boolean;
+}
+
+/** Max original file size we accept through the serverless upload endpoint.
+ *  base64 inflates ~33%, and Vercel functions cap the body around 4.5 MB. */
+export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+
 export interface ApiError {
   error: string;
 }

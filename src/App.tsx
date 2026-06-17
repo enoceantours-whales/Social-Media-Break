@@ -4,8 +4,9 @@ import { MediaUploader, type SelectedMedia } from "./components/MediaUploader";
 import { BrandSelector, PostTypeSelector } from "./components/Selectors";
 import { CaptionEditor } from "./components/CaptionEditor";
 import { Scheduler } from "./components/Scheduler";
-import { fileToBase64, generateCaptions, schedulePost } from "./lib/api";
+import { fileToBase64, generateCaptions, schedulePost, uploadMedia } from "./lib/api";
 import { defaultScheduleTime } from "../shared/brands";
+import { MAX_UPLOAD_BYTES } from "../shared/types";
 import type {
   BrandId,
   CaptionSet,
@@ -34,9 +35,11 @@ export default function App() {
   const [scheduledAt, setScheduledAt] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
   const [scheduling, setScheduling] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [result, setResult] = useState<SchedulePostResponse | null>(null);
 
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const currentStep = useMemo(() => {
     if (result) return 6;
@@ -86,14 +89,42 @@ export default function App() {
   async function handleSchedule() {
     if (!brand || !postType || !captions) return;
     setError(null);
+    setNotice(null);
     setScheduling(true);
     try {
+      let urlToUse = mediaUrl.trim();
+
+      // Auto-host the uploaded file on Google Drive when no URL was pasted.
+      if (!urlToUse && media) {
+        if (media.file.size > MAX_UPLOAD_BYTES) {
+          setNotice(
+            `${media.file.name} is over ${MAX_UPLOAD_BYTES / 1024 / 1024} MB, so it wasn't auto-hosted — scheduling captions as text. Paste a hosted media URL to attach it.`,
+          );
+        } else {
+          setUploadingMedia(true);
+          try {
+            const { base64, mediaType } = await fileToBase64(media.file);
+            const up = await uploadMedia({ base64, mediaType, filename: media.file.name });
+            if (up.url) {
+              urlToUse = up.url;
+              setMediaUrl(up.url);
+            } else if (up.demo) {
+              setNotice(
+                "Google Drive isn't configured, so media wasn't hosted — scheduling captions as text. Set the GOOGLE_SERVICE_ACCOUNT_* env vars to auto-attach media.",
+              );
+            }
+          } finally {
+            setUploadingMedia(false);
+          }
+        }
+      }
+
       const res = await schedulePost({
         brand,
         postType,
         captions,
         scheduledAt: scheduledAt || undefined,
-        mediaUrl: mediaUrl.trim() || undefined,
+        mediaUrl: urlToUse || undefined,
       });
       setResult(res);
     } catch (err) {
@@ -114,6 +145,7 @@ export default function App() {
     setMediaUrl("");
     setResult(null);
     setError(null);
+    setNotice(null);
   }
 
   const canGenerate = Boolean(brand && postType) && !generating;
@@ -128,6 +160,7 @@ export default function App() {
       <StepNav steps={STEPS} current={currentStep} />
 
       {error && <div className="banner error">{error}</div>}
+      {notice && <div className="demo-banner">{notice}</div>}
 
       {!result && (
         <>
@@ -188,7 +221,7 @@ export default function App() {
                     {scheduling ? (
                       <>
                         <span className="spinner" />
-                        Scheduling…
+                        {uploadingMedia ? "Hosting media…" : "Scheduling…"}
                       </>
                     ) : (
                       "Schedule via Buffer →"

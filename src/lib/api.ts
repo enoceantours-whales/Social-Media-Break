@@ -4,6 +4,8 @@ import type {
   GenerateCaptionsResponse,
   SchedulePostRequest,
   SchedulePostResponse,
+  UploadMediaRequest,
+  UploadMediaResponse,
 } from "../../shared/types";
 
 async function post<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
@@ -28,6 +30,10 @@ export function generateCaptions(
 
 export function schedulePost(req: SchedulePostRequest): Promise<SchedulePostResponse> {
   return post("/api/schedule-post", req);
+}
+
+export function uploadMedia(req: UploadMediaRequest): Promise<UploadMediaResponse> {
+  return post("/api/upload-media", req);
 }
 
 /** Read a File into a base64 string (no data: prefix) + its MIME type. */

@@ -64,7 +64,7 @@ export function Scheduler({
         </div>
         <div>
           <label className="field" htmlFor="media-url">
-            Media URL (optional — hosted image/video for Buffer)
+            Media URL (optional — overrides Google Drive auto-hosting)
           </label>
           <input
             id="media-url"
@@ -77,9 +77,9 @@ export function Scheduler({
       </div>
 
       <p className="hint" style={{ marginTop: 14, marginBottom: 0 }}>
-        Will be sent to Buffer for <strong>{friendly}</strong>. Buffer needs a publicly
-        reachable media URL to attach an image or video; without one, the captions are
-        scheduled as text.
+        Will be sent to Buffer for <strong>{friendly}</strong>. Your uploaded file is
+        auto-hosted on Google Drive so Buffer can attach it — or paste your own hosted URL
+        above to override. If neither is available, captions are scheduled as text.
       </p>
     </div>
   );
