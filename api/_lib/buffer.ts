@@ -239,6 +239,9 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
 
   const channels = await fetchChannels(token);
   const resolved = resolveChannels(channels, req.brand);
+  const labelById = new Map(
+    channels.map((c) => [c.id, c.displayName ?? c.name ?? c.service]),
+  );
   const results: ScheduledPlatformResult[] = [];
 
   for (const platform of selected) {
@@ -255,12 +258,15 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
     }
     const text = captionFor(req.captions, platform);
     const r = await createPost(token, channelId, text, scheduledAt, req.mediaUrl);
+    const label = labelById.get(channelId) ?? channelId;
     results.push({
       platform,
       profileId: channelId,
       bufferUpdateId: r.id,
       status: r.ok ? "scheduled" : "error",
-      message: r.ok ? undefined : r.message,
+      message: r.ok
+        ? `→ ${label}${r.id ? ` · post ${r.id}` : " · (no post id returned)"}`
+        : r.message,
     });
   }
 
