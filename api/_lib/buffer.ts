@@ -159,8 +159,6 @@ interface CreatePostResult {
   id: string | null;
   ok: boolean;
   message?: string;
-  /** The PostActionPayload concrete type Buffer returned, for diagnosing. */
-  typename?: string;
 }
 
 /** Build a Buffer AssetInput for a hosted media URL (image vs video by extension). */
@@ -202,10 +200,21 @@ async function createPost(
       } }`,
     );
     const cp = data.createPost;
-    if (cp?.__typename === "MutationError") {
-      return { id: null, ok: false, message: cp.message ?? "Buffer rejected the post." };
+    // Only PostActionSuccess carries a post. Every error type (LimitReachedError,
+    // etc.) implements the MutationError interface, so the `message` fragment is
+    // populated regardless of the concrete type — treat "no post" as an error and
+    // surface why (matching on __typename === "MutationError" never works, since
+    // the real typename is the concrete error type).
+    if (cp?.post?.id) {
+      return { id: cp.post.id, ok: true };
     }
-    return { id: cp?.post?.id ?? null, ok: true, typename: cp?.__typename };
+    return {
+      id: null,
+      ok: false,
+      message:
+        cp?.message ??
+        `Buffer could not create the post (${cp?.__typename ?? "unknown response"}).`,
+    };
   } catch (err) {
     return { id: null, ok: false, message: err instanceof Error ? err.message : String(err) };
   }
@@ -266,9 +275,7 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
       profileId: channelId,
       bufferUpdateId: r.id,
       status: r.ok ? "scheduled" : "error",
-      message: r.ok
-        ? `→ ${label}${r.id ? ` · post ${r.id}` : ` · (no id; Buffer returned type ${r.typename ?? "?"})`}`
-        : r.message,
+      message: r.ok ? `→ ${label} · post ${r.id}` : r.message,
     });
   }
 
