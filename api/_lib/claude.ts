@@ -25,7 +25,7 @@ const PLATFORM_RULES: Record<Platform, string> = {
 };
 
 /** JSON schema constraining Claude's output to a clean, parseable caption set. */
-function captionSchema() {
+function captionSchema(platforms: Platform[]) {
   const platformObject = {
     type: "object",
     properties: {
@@ -37,15 +37,15 @@ function captionSchema() {
   };
   return {
     type: "object",
-    properties: Object.fromEntries(PLATFORMS.map((p) => [p, platformObject])),
-    required: [...PLATFORMS],
+    properties: Object.fromEntries(platforms.map((p) => [p, platformObject])),
+    required: [...platforms],
     additionalProperties: false,
   };
 }
 
-function buildPrompt(brand: BrandId, req: GenerateCaptionsRequest): string {
+function buildPrompt(brand: BrandId, req: GenerateCaptionsRequest, platforms: Platform[]): string {
   const cfg = BRANDS[brand];
-  const rules = PLATFORMS.map((p) => `- ${PLATFORM_RULES[p]}`).join("\n");
+  const rules = platforms.map((p) => `- ${PLATFORM_RULES[p]}`).join("\n");
   const contextLine = req.context?.trim()
     ? `\nWhat's in this post (from the photographer/operator): "${req.context.trim()}"`
     : "";
@@ -63,7 +63,7 @@ function buildPrompt(brand: BrandId, req: GenerateCaptionsRequest): string {
     contextLine,
     imageLine,
     "",
-    "Write one caption per platform, each tuned to that platform AND staying true to the brand voice. Do not be robotic or generic. Per-platform rules:",
+    "Write one caption for each of the requested platforms, each tuned to that platform AND staying true to the brand voice. Do not be robotic or generic. Per-platform rules:",
     rules,
     "",
     "Return hashtags without the leading # character. Keep them genuinely relevant — quality over quantity.",
@@ -71,11 +71,11 @@ function buildPrompt(brand: BrandId, req: GenerateCaptionsRequest): string {
 }
 
 /** Sample captions used when no API key is set, so the UI is fully clickable. */
-export function demoCaptions(brand: BrandId): CaptionSet {
+export function demoCaptions(brand: BrandId, platforms: Platform[] = [...PLATFORMS]): CaptionSet {
   const enocean = brand === "enocean";
   const mk = (text: string, hashtags: string[]): PlatformCaption => ({ text, hashtags });
-  if (enocean) {
-    return {
+  const full: Record<Platform, PlatformCaption> = enocean
+    ? {
       instagram: mk(
         "Glassy seas and a curious gray whale that stuck with us most of the morning. Days like this are why we do it. 🐋",
         ["whalewatching", "danapoint", "enoceantours", "pacificocean", "graywhale"],
@@ -92,24 +92,25 @@ export function demoCaptions(brand: BrandId): CaptionSet {
         "Every trip is a reminder that the Pacific runs on its own schedule. This morning it rewarded a patient crew with a gray whale alongside the boat for twenty minutes. Sharing the ocean with first-time guests never gets old.",
         ["marinelife", "ecotourism"],
       ),
+    }
+    : {
+      instagram: mk("Last light, holding on a little longer than it should have.", [
+        "cinematography",
+        "naturallight",
+        "slatermoore",
+      ]),
+      facebook: mk(
+        "A frame from this week — that narrow window when the light goes soft and everything quiets down. Worth waiting for.",
+        ["photography"],
+      ),
+      twitter: mk("That last bit of light, holding.", ["photography", "cinematography"]),
+      linkedin: mk(
+        "Most of the work is waiting — for the light, the moment, the stillness. This frame came at the very end of the day, when both finally arrived.",
+        ["photography", "visualstorytelling"],
+      ),
     };
-  }
-  return {
-    instagram: mk("Last light, holding on a little longer than it should have.", [
-      "cinematography",
-      "naturallight",
-      "slatermoore",
-    ]),
-    facebook: mk(
-      "A frame from this week — that narrow window when the light goes soft and everything quiets down. Worth waiting for.",
-      ["photography"],
-    ),
-    twitter: mk("That last bit of light, holding.", ["photography", "cinematography"]),
-    linkedin: mk(
-      "Most of the work is waiting — for the light, the moment, the stillness. This frame came at the very end of the day, when both finally arrived.",
-      ["photography", "visualstorytelling"],
-    ),
-  };
+  // Only return the requested platforms.
+  return Object.fromEntries(platforms.map((p) => [p, full[p]])) as CaptionSet;
 }
 
 /**
@@ -119,9 +120,11 @@ export function demoCaptions(brand: BrandId): CaptionSet {
 export async function generateCaptions(
   req: GenerateCaptionsRequest,
 ): Promise<{ captions: CaptionSet; demo: boolean }> {
+  const platforms = req.platforms?.length ? req.platforms : [...PLATFORMS];
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return { captions: demoCaptions(req.brand), demo: true };
+    return { captions: demoCaptions(req.brand, platforms), demo: true };
   }
 
   const client = new Anthropic({ apiKey });
@@ -141,7 +144,7 @@ export async function generateCaptions(
       },
     });
   }
-  content.push({ type: "text", text: buildPrompt(req.brand, req) });
+  content.push({ type: "text", text: buildPrompt(req.brand, req, platforms) });
 
   // `thinking: adaptive` and `output_config` are current API features that the
   // pinned SDK's TS types predate, so we build the body and cast it through.
@@ -150,7 +153,7 @@ export async function generateCaptions(
     max_tokens: 2000,
     thinking: { type: "adaptive" },
     output_config: {
-      format: { type: "json_schema", schema: captionSchema() },
+      format: { type: "json_schema", schema: captionSchema(platforms) },
     },
     messages: [{ role: "user", content }],
   };

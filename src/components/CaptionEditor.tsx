@@ -27,6 +27,9 @@ export function CaptionEditor({ captions, onChange, selected, onToggle }: Props)
     onChange({ ...captions, [platform]: { ...captions[platform], ...patch } });
   }
 
+  // Only the platforms that were generated (picked up front) appear here.
+  const present = PLATFORMS.filter((p) => captions[p]);
+
   return (
     <div className="card">
       <h2>4 · Review &amp; edit captions</h2>
@@ -35,8 +38,8 @@ export function CaptionEditor({ captions, onChange, selected, onToggle }: Props)
         platform you don&apos;t want to post to — only ticked ones are scheduled.
       </p>
 
-      {PLATFORMS.map((platform) => {
-        const c = captions[platform];
+      {present.map((platform) => {
+        const c = captions[platform]!;
         const meta = PLATFORM_META[platform];
         const length = renderedLength(c.text, c.hashtags);
         const over = meta.limit != null && length > meta.limit;
