@@ -159,6 +159,8 @@ interface CreatePostResult {
   id: string | null;
   ok: boolean;
   message?: string;
+  /** The PostActionPayload concrete type Buffer returned, for diagnosing. */
+  typename?: string;
 }
 
 /** Build a Buffer AssetInput for a hosted media URL (image vs video by extension). */
@@ -203,7 +205,7 @@ async function createPost(
     if (cp?.__typename === "MutationError") {
       return { id: null, ok: false, message: cp.message ?? "Buffer rejected the post." };
     }
-    return { id: cp?.post?.id ?? null, ok: true };
+    return { id: cp?.post?.id ?? null, ok: true, typename: cp?.__typename };
   } catch (err) {
     return { id: null, ok: false, message: err instanceof Error ? err.message : String(err) };
   }
@@ -265,7 +267,7 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
       bufferUpdateId: r.id,
       status: r.ok ? "scheduled" : "error",
       message: r.ok
-        ? `→ ${label}${r.id ? ` · post ${r.id}` : " · (no post id returned)"}`
+        ? `→ ${label}${r.id ? ` · post ${r.id}` : ` · (no id; Buffer returned type ${r.typename ?? "?"})`}`
         : r.message,
     });
   }
