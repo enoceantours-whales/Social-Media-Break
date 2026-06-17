@@ -148,12 +148,14 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
   const token = process.env.BUFFER_ACCESS_TOKEN;
   const scheduledAt = req.scheduledAt ?? defaultScheduleTime(req.brand).toISOString();
   const dashboardUrl = "https://publish.buffer.com/all-channels";
+  // Only post to the platforms the user kept selected (default: all four).
+  const selected = req.platforms?.length ? req.platforms : PLATFORMS;
 
   if (!token) {
     return {
       demo: true,
       dashboardUrl,
-      results: PLATFORMS.map((platform) => ({
+      results: selected.map((platform) => ({
         platform,
         profileId: null,
         bufferUpdateId: `demo-${platform}`,
@@ -166,7 +168,7 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
   const profiles = await resolveProfiles(token, req.brand);
   const results: ScheduledPlatformResult[] = [];
 
-  for (const platform of PLATFORMS) {
+  for (const platform of selected) {
     const profileId = profiles[platform] ?? null;
     if (!profileId) {
       results.push({

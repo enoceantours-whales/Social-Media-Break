@@ -17,8 +17,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!body.postType || !POST_TYPES.includes(body.postType)) {
     return sendError(res, 400, "A valid `postType` is required.");
   }
-  if (!body.captions || PLATFORMS.some((p) => !body.captions[p]?.text)) {
-    return sendError(res, 400, "`captions` must include text for every platform.");
+  if (body.platforms) {
+    if (body.platforms.length === 0) {
+      return sendError(res, 400, "Select at least one platform to post to.");
+    }
+    if (body.platforms.some((p) => !PLATFORMS.includes(p))) {
+      return sendError(res, 400, "`platforms` contains an unknown platform.");
+    }
+  }
+  const selected = body.platforms ?? PLATFORMS;
+  if (!body.captions || selected.some((p) => !body.captions[p]?.text)) {
+    return sendError(res, 400, "`captions` must include text for every selected platform.");
   }
   if (body.scheduledAt && Number.isNaN(Date.parse(body.scheduledAt))) {
     return sendError(res, 400, "`scheduledAt` must be a valid ISO 8601 timestamp.");
