@@ -4,7 +4,12 @@ import { MediaUploader, type SelectedMedia } from "./components/MediaUploader";
 import { BrandSelector, PostTypeSelector } from "./components/Selectors";
 import { CaptionEditor } from "./components/CaptionEditor";
 import { Scheduler } from "./components/Scheduler";
-import { fileToBase64, generateCaptions, schedulePost, uploadMediaToBlob } from "./lib/api";
+import {
+  downscaleImageToBase64,
+  generateCaptions,
+  schedulePost,
+  uploadMediaToBlob,
+} from "./lib/api";
 import { defaultScheduleTime } from "../shared/brands";
 import type {
   BrandId,
@@ -65,7 +70,9 @@ export default function App() {
       let imageBase64: string | undefined;
       let imageMediaType: string | undefined;
       if (media?.kind === "image") {
-        const { base64, mediaType } = await fileToBase64(media.file);
+        // Downscale for Claude vision so large photos don't exceed the request
+        // limit; the full-resolution file is still posted via Blob.
+        const { base64, mediaType } = await downscaleImageToBase64(media.file);
         imageBase64 = base64;
         imageMediaType = mediaType;
       }
