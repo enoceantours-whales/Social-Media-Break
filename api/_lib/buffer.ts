@@ -4,9 +4,24 @@ import type {
   BrandId,
   CaptionSet,
   Platform,
+  PostType,
   ScheduledPlatformResult,
   SchedulePostRequest,
 } from "../../shared/types.js";
+
+// Buffer's per-network post "type" (Facebook/Instagram require it).
+const POST_TYPE_TO_BUFFER: Record<PostType, string> = {
+  photo: "post",
+  carousel: "post",
+  reel: "reel",
+  story: "story",
+};
+
+// Which platforms take a `type` in metadata, keyed by the metadata field name.
+const METADATA_KEY: Partial<Record<Platform, string>> = {
+  facebook: "facebook",
+  instagram: "instagram",
+};
 
 // Buffer's current API is GraphQL. The legacy api.bufferapp.com REST API does
 // not accept the new personal/app keys (it 401s with an OIDC error).
@@ -174,6 +189,8 @@ async function createPost(
   channelId: string,
   text: string,
   dueAtIso: string,
+  platform: Platform,
+  postType: PostType,
   mediaUrl?: string,
 ): Promise<CreatePostResult> {
   const fields = [
@@ -185,6 +202,11 @@ async function createPost(
   ];
   // Media attaches through the assets array ([AssetInput!] with @oneOf image/video).
   if (mediaUrl) fields.push(`assets: [${assetForUrl(mediaUrl)}]`);
+  // Facebook/Instagram require a post type (post | story | reel) in metadata.
+  const metaKey = METADATA_KEY[platform];
+  if (metaKey) {
+    fields.push(`metadata: { ${metaKey}: { type: ${POST_TYPE_TO_BUFFER[postType]} } }`);
+  }
 
   try {
     // createPost returns a PostActionPayload union (PostActionSuccess | MutationError),
@@ -268,7 +290,15 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
       continue;
     }
     const text = captionFor(req.captions, platform);
-    const r = await createPost(token, channelId, text, scheduledAt, req.mediaUrl);
+    const r = await createPost(
+      token,
+      channelId,
+      text,
+      scheduledAt,
+      platform,
+      req.postType,
+      req.mediaUrl,
+    );
     const label = labelById.get(channelId) ?? channelId;
     results.push({
       platform,
