@@ -37,7 +37,7 @@ export default function App() {
   const [captions, setCaptions] = useState<CaptionSet | null>(null);
   const [captionsDemo, setCaptionsDemo] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([...PLATFORMS]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
 
   const [scheduledAt, setScheduledAt] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
@@ -166,7 +166,7 @@ export default function App() {
     setContext("");
     setCaptions(null);
     setCaptionsDemo(false);
-    setSelectedPlatforms([...PLATFORMS]);
+    setSelectedPlatforms([]);
     setScheduledAt("");
     setMediaUrl("");
     setUploadingMedia(false);
