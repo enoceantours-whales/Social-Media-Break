@@ -17,12 +17,6 @@ const POST_TYPE_TO_BUFFER: Record<PostType, string> = {
   story: "story",
 };
 
-// Which platforms take a `type` in metadata, keyed by the metadata field name.
-const METADATA_KEY: Partial<Record<Platform, string>> = {
-  facebook: "facebook",
-  instagram: "instagram",
-};
-
 // Buffer's current API is GraphQL. The legacy api.bufferapp.com REST API does
 // not accept the new personal/app keys (it 401s with an OIDC error).
 const BUFFER_GRAPHQL = "https://api.buffer.com";
@@ -202,10 +196,16 @@ async function createPost(
   ];
   // Media attaches through the assets array ([AssetInput!] with @oneOf image/video).
   if (mediaUrl) fields.push(`assets: [${assetForUrl(mediaUrl)}]`);
-  // Facebook/Instagram require a post type (post | story | reel) in metadata.
-  const metaKey = METADATA_KEY[platform];
-  if (metaKey) {
-    fields.push(`metadata: { ${metaKey}: { type: ${POST_TYPE_TO_BUFFER[postType]} } }`);
+  // Facebook/Instagram require a post type (post | story | reel) in metadata;
+  // Instagram additionally requires shouldShareToFeed (not applicable to stories).
+  const bufType = POST_TYPE_TO_BUFFER[postType];
+  if (platform === "facebook") {
+    fields.push(`metadata: { facebook: { type: ${bufType} } }`);
+  } else if (platform === "instagram") {
+    const shareToFeed = postType !== "story";
+    fields.push(
+      `metadata: { instagram: { type: ${bufType}, shouldShareToFeed: ${shareToFeed} } }`,
+    );
   }
 
   try {
