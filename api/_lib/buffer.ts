@@ -187,11 +187,23 @@ async function createPost(
   if (mediaUrl) fields.push(`assets: [${assetForUrl(mediaUrl)}]`);
 
   try {
-    const data = await bufferGraphQL<{ createPost: { id: string } }>(
+    // createPost returns a PostActionPayload union (PostActionSuccess | MutationError),
+    // so select fields via inline fragments and surface any rejection message.
+    const data = await bufferGraphQL<{
+      createPost: { __typename: string; post?: { id: string }; message?: string };
+    }>(
       token,
-      `mutation { createPost(input: { ${fields.join(", ")} }) { id } }`,
+      `mutation { createPost(input: { ${fields.join(", ")} }) {
+        __typename
+        ... on PostActionSuccess { post { id } }
+        ... on MutationError { message }
+      } }`,
     );
-    return { id: data.createPost?.id ?? null, ok: true };
+    const cp = data.createPost;
+    if (cp?.__typename === "MutationError") {
+      return { id: null, ok: false, message: cp.message ?? "Buffer rejected the post." };
+    }
+    return { id: cp?.post?.id ?? null, ok: true };
   } catch (err) {
     return { id: null, ok: false, message: err instanceof Error ? err.message : String(err) };
   }
