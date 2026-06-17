@@ -4,7 +4,7 @@ import { MediaUploader, type SelectedMedia } from "./components/MediaUploader";
 import { BrandSelector, PostTypeSelector } from "./components/Selectors";
 import { CaptionEditor } from "./components/CaptionEditor";
 import { Scheduler } from "./components/Scheduler";
-import { fileToBase64, generateCaptions, schedulePost } from "./lib/api";
+import { fileToBase64, generateCaptions, schedulePost, uploadMediaToBlob } from "./lib/api";
 import { defaultScheduleTime } from "../shared/brands";
 import type {
   BrandId,
@@ -34,9 +34,12 @@ export default function App() {
   const [scheduledAt, setScheduledAt] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
   const [scheduling, setScheduling] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
   const [result, setResult] = useState<SchedulePostResponse | null>(null);
 
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const currentStep = useMemo(() => {
     if (result) return 6;
@@ -86,14 +89,39 @@ export default function App() {
   async function handleSchedule() {
     if (!brand || !postType || !captions) return;
     setError(null);
+    setNotice(null);
     setScheduling(true);
     try {
+      let urlToUse = mediaUrl.trim();
+
+      // No pasted URL but we have a file → upload it directly to Blob storage.
+      if (!urlToUse && media) {
+        setUploadingMedia(true);
+        setUploadPct(0);
+        try {
+          urlToUse = await uploadMediaToBlob(media.file, setUploadPct);
+          setMediaUrl(urlToUse);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "";
+          // If Blob isn't set up, schedule as text rather than blocking the demo.
+          if (/configured/i.test(msg)) {
+            setNotice(
+              "Media hosting (Vercel Blob) isn't set up yet, so this was scheduled as text. Add a Blob store to attach the photo/video.",
+            );
+          } else {
+            throw err; // a real upload failure should surface and abort.
+          }
+        } finally {
+          setUploadingMedia(false);
+        }
+      }
+
       const res = await schedulePost({
         brand,
         postType,
         captions,
         scheduledAt: scheduledAt || undefined,
-        mediaUrl: mediaUrl.trim() || undefined,
+        mediaUrl: urlToUse || undefined,
       });
       setResult(res);
     } catch (err) {
@@ -112,8 +140,11 @@ export default function App() {
     setCaptionsDemo(false);
     setScheduledAt("");
     setMediaUrl("");
+    setUploadingMedia(false);
+    setUploadPct(0);
     setResult(null);
     setError(null);
+    setNotice(null);
   }
 
   const canGenerate = Boolean(brand && postType) && !generating;
@@ -128,6 +159,7 @@ export default function App() {
       <StepNav steps={STEPS} current={currentStep} />
 
       {error && <div className="banner error">{error}</div>}
+      {notice && <div className="demo-banner">{notice}</div>}
 
       {!result && (
         <>
@@ -188,7 +220,7 @@ export default function App() {
                     {scheduling ? (
                       <>
                         <span className="spinner" />
-                        Scheduling…
+                        {uploadingMedia ? `Uploading media… ${uploadPct}%` : "Scheduling…"}
                       </>
                     ) : (
                       "Schedule via Buffer →"
