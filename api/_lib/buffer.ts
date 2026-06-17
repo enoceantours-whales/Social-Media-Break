@@ -161,6 +161,13 @@ interface CreatePostResult {
   message?: string;
 }
 
+/** Build a Buffer AssetInput for a hosted media URL (image vs video by extension). */
+function assetForUrl(url: string): string {
+  const isVideo = /\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(url);
+  const inner = `{ url: ${JSON.stringify(url)} }`;
+  return isVideo ? `{ video: ${inner} }` : `{ image: ${inner} }`;
+}
+
 /** createPost mutation — schedule one post to one channel at an exact time. */
 async function createPost(
   token: string,
@@ -176,7 +183,8 @@ async function createPost(
     `mode: customScheduled`,
     `dueAt: ${JSON.stringify(dueAtIso)}`,
   ];
-  if (mediaUrl) fields.push(`imageUrl: ${JSON.stringify(mediaUrl)}`);
+  // Media attaches through the assets array ([AssetInput!] with @oneOf image/video).
+  if (mediaUrl) fields.push(`assets: [${assetForUrl(mediaUrl)}]`);
 
   try {
     const data = await bufferGraphQL<{ createPost: { id: string } }>(
