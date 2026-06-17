@@ -8,21 +8,26 @@ import type {
   SchedulePostRequest,
 } from "../../shared/types.js";
 
-const BUFFER_API = "https://api.bufferapp.com/1";
+// Buffer's current API is GraphQL. The legacy api.bufferapp.com REST API does
+// not accept the new personal/app keys (it 401s with an OIDC error).
+const BUFFER_GRAPHQL = "https://api.buffer.com";
 
-/** Buffer's `service` strings map onto our Platform ids. */
+/** Buffer `service` strings map onto our Platform ids. */
 const SERVICE_TO_PLATFORM: Record<string, Platform> = {
   instagram: "instagram",
   facebook: "facebook",
   twitter: "twitter",
+  x: "twitter",
   linkedin: "linkedin",
 };
 
-interface BufferProfile {
+interface BufferChannel {
   id: string;
+  name?: string;
+  displayName?: string;
   service: string;
-  service_username?: string;
-  formatted_service?: string;
+  organizationId: string;
+  organizationName: string;
 }
 
 export interface ProfileSummary {
@@ -32,26 +37,76 @@ export interface ProfileSummary {
   username: string;
 }
 
-/** GET /profiles — list the Buffer channels connected to this token. */
-export async function listProfiles(token: string): Promise<ProfileSummary[]> {
-  const res = await fetch(`${BUFFER_API}/profiles.json?access_token=${encodeURIComponent(token)}`);
+/** Run a GraphQL operation against the Buffer API with a Bearer token. */
+async function bufferGraphQL<T>(
+  token: string,
+  query: string,
+): Promise<T> {
+  const res = await fetch(BUFFER_GRAPHQL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ query }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    data?: T;
+    errors?: { message: string }[];
+  };
   if (!res.ok) {
-    throw new Error(`Buffer profiles request failed (${res.status}): ${await res.text()}`);
+    const detail = json.errors?.[0]?.message ?? `HTTP ${res.status}`;
+    throw new Error(`Buffer API request failed: ${detail}`);
   }
-  const profiles = (await res.json()) as BufferProfile[];
-  return profiles.map((p) => ({
-    id: p.id,
-    service: p.service,
-    platform: SERVICE_TO_PLATFORM[p.service] ?? null,
-    username: p.service_username ?? p.formatted_service ?? p.service,
+  if (json.errors?.length) {
+    throw new Error(`Buffer API error: ${json.errors.map((e) => e.message).join("; ")}`);
+  }
+  if (!json.data) throw new Error("Buffer API returned no data.");
+  return json.data;
+}
+
+/** List every channel across the token's organizations. */
+async function fetchChannels(token: string): Promise<BufferChannel[]> {
+  const orgData = await bufferGraphQL<{
+    account: { organizations: { id: string; name: string }[] };
+  }>(token, `query { account { organizations { id name } } }`);
+
+  const channels: BufferChannel[] = [];
+  for (const org of orgData.account.organizations ?? []) {
+    const data = await bufferGraphQL<{
+      channels: { id: string; name?: string; displayName?: string; service: string }[];
+    }>(
+      token,
+      `query { channels(input: { organizationId: ${JSON.stringify(org.id)} }) {
+        id
+        name
+        displayName
+        service
+      } }`,
+    );
+    for (const c of data.channels ?? []) {
+      channels.push({ ...c, organizationId: org.id, organizationName: org.name });
+    }
+  }
+  return channels;
+}
+
+/** GET /api/profiles — list the Buffer channels connected to this token. */
+export async function listProfiles(token: string): Promise<ProfileSummary[]> {
+  const channels = await fetchChannels(token);
+  return channels.map((c) => ({
+    id: c.id,
+    service: c.service,
+    platform: SERVICE_TO_PLATFORM[c.service] ?? null,
+    username: c.displayName ?? c.name ?? c.service,
   }));
 }
 
 /**
- * Parse a brand's pinned-profile env var, e.g.
+ * Parse a brand's pinned-channel env var, e.g.
  *   "instagram:5f...,facebook:5a..." -> { instagram: "5f...", facebook: "5a..." }
  */
-function pinnedProfiles(brand: BrandId): Partial<Record<Platform, string>> {
+function pinnedChannels(brand: BrandId): Partial<Record<Platform, string>> {
   const raw =
     brand === "enocean"
       ? process.env.BUFFER_PROFILES_ENOCEAN
@@ -67,66 +122,30 @@ function pinnedProfiles(brand: BrandId): Partial<Record<Platform, string>> {
 }
 
 /**
- * Resolve which Buffer profile to post to for each platform of a brand.
- * Prefers pinned env-var IDs, then falls back to the first connected profile
- * for that service.
+ * Resolve which Buffer channel to post to for each platform of a brand.
+ * Prefers pinned env-var IDs; otherwise matches by service, preferring a
+ * channel whose name mentions the brand, then falling back to the first match.
  */
-async function resolveProfiles(
-  token: string,
+function resolveChannels(
+  channels: BufferChannel[],
   brand: BrandId,
-): Promise<Partial<Record<Platform, string>>> {
-  const pinned = pinnedProfiles(brand);
-  const needed = PLATFORMS.filter((p) => !pinned[p]);
-  if (needed.length === 0) return pinned;
-
-  const all = await listProfiles(token);
+): Partial<Record<Platform, string>> {
+  const pinned = pinnedChannels(brand);
   const resolved: Partial<Record<Platform, string>> = { ...pinned };
-  for (const platform of needed) {
-    const match = all.find((p) => p.platform === platform);
-    if (match) resolved[platform] = match.id;
+  const brandName = BRANDS[brand].name.toLowerCase();
+  const brandKey = brand === "enocean" ? "enocean" : "moore";
+
+  for (const platform of PLATFORMS) {
+    if (resolved[platform]) continue;
+    const matches = channels.filter((c) => SERVICE_TO_PLATFORM[c.service] === platform);
+    if (matches.length === 0) continue;
+    const branded = matches.find((c) => {
+      const label = `${c.displayName ?? ""} ${c.name ?? ""} ${c.organizationName}`.toLowerCase();
+      return label.includes(brandName) || label.includes(brandKey);
+    });
+    resolved[platform] = (branded ?? matches[0]).id;
   }
   return resolved;
-}
-
-interface CreateUpdateResult {
-  id: string | null;
-  ok: boolean;
-  message?: string;
-}
-
-/** POST /updates/create — schedule one update to one profile. */
-async function createUpdate(
-  token: string,
-  profileId: string,
-  text: string,
-  scheduledAtIso: string,
-  mediaUrl?: string,
-): Promise<CreateUpdateResult> {
-  const params = new URLSearchParams();
-  params.set("access_token", token);
-  params.append("profile_ids[]", profileId);
-  params.set("text", text);
-  params.set("scheduled_at", scheduledAtIso);
-  if (mediaUrl) {
-    params.set("media[photo]", mediaUrl);
-    params.set("media[thumbnail]", mediaUrl);
-  }
-
-  const res = await fetch(`${BUFFER_API}/updates/create.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
-  });
-  const data = (await res.json().catch(() => ({}))) as {
-    success?: boolean;
-    updates?: { id: string }[];
-    message?: string;
-    code?: number;
-  };
-  if (!res.ok || data.success === false) {
-    return { id: null, ok: false, message: data.message ?? `Buffer error ${res.status}` };
-  }
-  return { id: data.updates?.[0]?.id ?? null, ok: true };
 }
 
 function captionFor(captions: CaptionSet, platform: Platform): string {
@@ -136,9 +155,43 @@ function captionFor(captions: CaptionSet, platform: Platform): string {
   return `${c.text}${tags}`.trim();
 }
 
+interface CreatePostResult {
+  id: string | null;
+  ok: boolean;
+  message?: string;
+}
+
+/** createPost mutation — schedule one post to one channel at an exact time. */
+async function createPost(
+  token: string,
+  channelId: string,
+  text: string,
+  dueAtIso: string,
+  mediaUrl?: string,
+): Promise<CreatePostResult> {
+  const fields = [
+    `channelId: ${JSON.stringify(channelId)}`,
+    `text: ${JSON.stringify(text)}`,
+    `schedulingType: automatic`,
+    `mode: customScheduled`,
+    `dueAt: ${JSON.stringify(dueAtIso)}`,
+  ];
+  if (mediaUrl) fields.push(`imageUrl: ${JSON.stringify(mediaUrl)}`);
+
+  try {
+    const data = await bufferGraphQL<{ createPost: { id: string } }>(
+      token,
+      `mutation { createPost(input: { ${fields.join(", ")} }) { id } }`,
+    );
+    return { id: data.createPost?.id ?? null, ok: true };
+  } catch (err) {
+    return { id: null, ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /**
- * Schedule a post across all four platforms via Buffer. Falls back to a demo
- * (no real posts sent) when BUFFER_ACCESS_TOKEN is not configured.
+ * Schedule a post across the selected platforms via Buffer's GraphQL API.
+ * Falls back to a demo (no real posts sent) when BUFFER_ACCESS_TOKEN is unset.
  */
 export async function schedulePost(req: SchedulePostRequest): Promise<{
   results: ScheduledPlatformResult[];
@@ -148,7 +201,6 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
   const token = process.env.BUFFER_ACCESS_TOKEN;
   const scheduledAt = req.scheduledAt ?? defaultScheduleTime(req.brand).toISOString();
   const dashboardUrl = "https://publish.buffer.com/all-channels";
-  // Only post to the platforms the user kept selected (default: all four).
   const selected = req.platforms?.length ? req.platforms : PLATFORMS;
 
   if (!token) {
@@ -165,40 +217,31 @@ export async function schedulePost(req: SchedulePostRequest): Promise<{
     };
   }
 
-  const profiles = await resolveProfiles(token, req.brand);
+  const channels = await fetchChannels(token);
+  const resolved = resolveChannels(channels, req.brand);
   const results: ScheduledPlatformResult[] = [];
 
   for (const platform of selected) {
-    const profileId = profiles[platform] ?? null;
-    if (!profileId) {
+    const channelId = resolved[platform] ?? null;
+    if (!channelId) {
       results.push({
         platform,
         profileId: null,
         status: "skipped",
         bufferUpdateId: null,
-        message: `No ${BRANDS[req.brand].name} ${platform} profile connected in Buffer.`,
+        message: `No ${BRANDS[req.brand].name} ${platform} channel connected in Buffer.`,
       });
       continue;
     }
     const text = captionFor(req.captions, platform);
-    try {
-      const r = await createUpdate(token, profileId, text, scheduledAt, req.mediaUrl);
-      results.push({
-        platform,
-        profileId,
-        bufferUpdateId: r.id,
-        status: r.ok ? "scheduled" : "error",
-        message: r.ok ? undefined : r.message,
-      });
-    } catch (err) {
-      results.push({
-        platform,
-        profileId,
-        bufferUpdateId: null,
-        status: "error",
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
+    const r = await createPost(token, channelId, text, scheduledAt, req.mediaUrl);
+    results.push({
+      platform,
+      profileId: channelId,
+      bufferUpdateId: r.id,
+      status: r.ok ? "scheduled" : "error",
+      message: r.ok ? undefined : r.message,
+    });
   }
 
   return { results, dashboardUrl, demo: false };
