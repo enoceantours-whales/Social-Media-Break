@@ -33,20 +33,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
   }
 
+  const body = parseBody<HandleUploadBody>(req);
+  // Log the event type so we can see in Vercel logs whether the second
+  // (upload-completed) call arrives and whether it errors.
+  console.log("[blob-upload] event type:", (body as { type?: string })?.type);
+
   try {
     const jsonResponse = await handleUpload({
-      body: parseBody<HandleUploadBody>(req),
+      body,
       request: req,
       onBeforeGenerateToken: async () => ({
         allowedContentTypes: ALLOWED_CONTENT_TYPES,
         maximumSizeInBytes: MAX_BYTES,
         addRandomSuffix: true,
       }),
-      // The client receives the public URL directly from upload(); nothing to do here.
-      onUploadCompleted: async () => {},
+      onUploadCompleted: async ({ blob }) => {
+        console.log("[blob-upload] completed:", blob?.url);
+      },
     });
     return res.status(200).json(jsonResponse);
   } catch (err) {
+    console.error("[blob-upload] error:", err);
     const message = err instanceof Error ? err.message : "Upload authorization failed.";
     return sendError(res, 400, message);
   }
