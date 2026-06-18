@@ -15,10 +15,9 @@ export const PLATFORMS: Platform[] = [
 
 export const POST_TYPES: PostType[] = ["photo", "carousel", "reel", "story"];
 
-/** A single platform's caption, plus any hashtags broken out for editing. */
+/** A single platform's caption. */
 export interface PlatformCaption {
   text: string;
-  hashtags: string[];
 }
 
 /** Captions keyed by platform — the shape Claude returns and the UI edits.

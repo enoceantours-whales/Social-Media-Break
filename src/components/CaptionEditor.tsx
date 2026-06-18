@@ -8,12 +8,6 @@ const PLATFORM_META: Record<Platform, { label: string; icon: string; limit?: num
   linkedin: { label: "LinkedIn", icon: "💼", target: "200–400 chars" },
 };
 
-/** Full rendered length including hashtags, the way it posts. */
-function renderedLength(text: string, hashtags: string[]): number {
-  const tags = hashtags.length ? " " + hashtags.map((h) => `#${h}`).join(" ") : "";
-  return (text + tags).length;
-}
-
 interface Props {
   captions: CaptionSet;
   onChange: (captions: CaptionSet) => void;
@@ -41,7 +35,7 @@ export function CaptionEditor({ captions, onChange, selected, onToggle }: Props)
       {present.map((platform) => {
         const c = captions[platform]!;
         const meta = PLATFORM_META[platform];
-        const length = renderedLength(c.text, c.hashtags);
+        const length = c.text.length;
         const over = meta.limit != null && length > meta.limit;
         const included = selected.includes(platform);
         return (
@@ -68,30 +62,11 @@ export function CaptionEditor({ captions, onChange, selected, onToggle }: Props)
               </span>
             </div>
             <textarea
-              rows={3}
+              rows={4}
               value={c.text}
               disabled={!included}
               onChange={(e) => update(platform, { text: e.target.value })}
             />
-            <div className="hashtags">
-              <label className="field" htmlFor={`tags-${platform}`}>
-                Hashtags (comma or space separated, no #)
-              </label>
-              <input
-                id={`tags-${platform}`}
-                type="text"
-                value={c.hashtags.join(" ")}
-                disabled={!included}
-                onChange={(e) =>
-                  update(platform, {
-                    hashtags: e.target.value
-                      .split(/[\s,]+/)
-                      .map((t) => t.replace(/^#/, "").trim())
-                      .filter(Boolean),
-                  })
-                }
-              />
-            </div>
           </div>
         );
       })}
