@@ -15,13 +15,13 @@ const MODEL = "claude-opus-4-8";
 /** Per-platform format rules baked into the prompt. */
 const PLATFORM_RULES: Record<Platform, string> = {
   instagram:
-    "Instagram: conversational, 120–200 characters of body copy, emoji used sparingly (0–2). Provide 5–10 relevant hashtags in the hashtags array (without the # so the UI can render them).",
+    "Instagram: conversational, 120–200 characters of body copy, emoji used sparingly (0–2).",
   facebook:
-    "Facebook: longer form, 150–300 characters, platform-native voice with a soft call-to-action (e.g. book a trip, see more, tag a friend). 0–3 hashtags.",
+    "Facebook: longer form, 150–300 characters, platform-native voice with a soft call-to-action (e.g. book a trip, see more, tag a friend).",
   twitter:
-    "Twitter/X: punchy and link-friendly, the full text MUST stay under 280 characters including hashtags. 1–3 hashtags.",
+    "Twitter/X: punchy and link-friendly, the full text MUST stay under 280 characters.",
   linkedin:
-    "LinkedIn: professional with a light thought-leadership angle, 200–400 characters. 0–3 hashtags, professional in tone.",
+    "LinkedIn: professional with a light thought-leadership angle, 200–400 characters.",
 };
 
 /** JSON schema constraining Claude's output to a clean, parseable caption set. */
@@ -30,9 +30,8 @@ function captionSchema(platforms: Platform[]) {
     type: "object",
     properties: {
       text: { type: "string" },
-      hashtags: { type: "array", items: { type: "string" } },
     },
-    required: ["text", "hashtags"],
+    required: ["text"],
     additionalProperties: false,
   };
   return {
@@ -66,47 +65,37 @@ function buildPrompt(brand: BrandId, req: GenerateCaptionsRequest, platforms: Pl
     "Write one caption for each of the requested platforms, each tuned to that platform AND staying true to the brand voice. Do not be robotic or generic. Per-platform rules:",
     rules,
     "",
-    "Return hashtags without the leading # character. Keep them genuinely relevant — quality over quantity.",
+    "Do not include hashtags in any caption.",
   ].join("\n");
 }
 
 /** Sample captions used when no API key is set, so the UI is fully clickable. */
 export function demoCaptions(brand: BrandId, platforms: Platform[] = [...PLATFORMS]): CaptionSet {
   const enocean = brand === "enocean";
-  const mk = (text: string, hashtags: string[]): PlatformCaption => ({ text, hashtags });
+  const mk = (text: string): PlatformCaption => ({ text });
   const full: Record<Platform, PlatformCaption> = enocean
     ? {
       instagram: mk(
         "Glassy seas and a curious gray whale that stuck with us most of the morning. Days like this are why we do it. 🐋",
-        ["whalewatching", "danapoint", "enoceantours", "pacificocean", "graywhale"],
       ),
       facebook: mk(
         "Today's trip delivered — calm water, great light, and a gray whale that surfaced alongside us for nearly twenty minutes. There's nothing like watching it happen in person. Come see what's out there with us this week.",
-        ["whalewatching", "danapoint"],
       ),
       twitter: mk(
         "Calm seas, great light, and a gray whale that hung around all morning. This is the job. 🐋",
-        ["whalewatching", "danapoint"],
       ),
       linkedin: mk(
         "Every trip is a reminder that the Pacific runs on its own schedule. This morning it rewarded a patient crew with a gray whale alongside the boat for twenty minutes. Sharing the ocean with first-time guests never gets old.",
-        ["marinelife", "ecotourism"],
       ),
     }
     : {
-      instagram: mk("Last light, holding on a little longer than it should have.", [
-        "cinematography",
-        "naturallight",
-        "slatermoore",
-      ]),
+      instagram: mk("Last light, holding on a little longer than it should have."),
       facebook: mk(
         "A frame from this week — that narrow window when the light goes soft and everything quiets down. Worth waiting for.",
-        ["photography"],
       ),
-      twitter: mk("That last bit of light, holding.", ["photography", "cinematography"]),
+      twitter: mk("That last bit of light, holding."),
       linkedin: mk(
         "Most of the work is waiting — for the light, the moment, the stillness. This frame came at the very end of the day, when both finally arrived.",
-        ["photography", "visualstorytelling"],
       ),
     };
   // Only return the requested platforms.

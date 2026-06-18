@@ -158,10 +158,7 @@ function resolveChannels(
 }
 
 function captionFor(captions: CaptionSet, platform: Platform): string {
-  const c = captions[platform];
-  if (!c) return "";
-  const tags = c.hashtags?.length ? " " + c.hashtags.map((h) => `#${h}`).join(" ") : "";
-  return `${c.text}${tags}`.trim();
+  return captions[platform]?.text?.trim() ?? "";
 }
 
 interface CreatePostResult {
